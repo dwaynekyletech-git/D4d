@@ -19,45 +19,39 @@ This project strictly uses **pnpm**. Do not use npm or yarn.
 
 ## Architecture
 
-This is a TypeScript Next.js 15 starter template for AI-powered applications with a travel agent theme:
+This is a TypeScript Next.js 15 starter template for AI-powered applications with MCP tools integration:
 
 ### Core Stack
 
 - **Next.js 15** with App Router and Turbopack for fast builds
-- **AI SDK 5** with OpenAI GPT-5 integration and web search tool
-- **Vectorize** for RAG document retrieval from your knowledge base
+- **AI SDK 5** with OpenAI GPT-5 integration and MCP tools
 - **shadcn/ui** components (New York style, neutral base color)
 - **Tailwind CSS v4** for styling
 
 ### Key Directories
 
 - `app/` - Next.js App Router pages and API routes
-- `app/api/chat/` - AI chat endpoint using streaming `streamText()`
-- `app/api/rag-agent/` - RAG-enabled agent endpoint with knowledge base access
+- `app/api/agent-with-mcp-tools/` - MCP-enabled agent endpoint with tool access
 - `components/chat/` - Chat interface components
 - `components/ai-elements/` - Vercel AI Elements components
 - `components/agent/` - Agent configuration (system prompts)
-  - `prompt.ts` - Default travel agent system prompt
-  - `rag-prompt.ts` - RAG agent system prompt for Catan and Peruvian restaurant
-- `components/agent/tools/` - AI SDK tools for agent capabilities (knowledge base retrieval, etc.)
+  - `web-scraper-prompt.ts` - Web scraper agent system prompt
+- `components/agent/tools/` - AI SDK tools for agent capabilities
 - `components/ui/` - shadcn/ui components
-- `lib/retrieval/` - Vectorize RAG service for document retrieval
 - `lib/utils.ts` - Utility functions including `cn()` for className merging
 - `types/` - TypeScript type definitions
 
 ### AI Integration
 
 - Uses AI SDK 5's `streamText()` for streaming responses
-- Configured for GPT-5 via OpenAI provider with web search tool enabled
-- Vectorize RAG integration via `VectorizeService` in `/lib/retrieval/`
-- System instructions defined in `components/agent/prompt.ts` (travel agent theme)
-- API route at `/api/chat` expects `{ messages: Array }` and returns streaming text
-- RAG-enabled agent at `/api/rag-agent` includes `retrieveKnowledgeBase` tool for knowledge base access
+- Configured for GPT-5 via OpenAI provider with MCP tools enabled
+- System instructions defined in `components/agent/web-scraper-prompt.ts`
+- API route at `/api/agent-with-mcp-tools` expects `{ messages: Array }` and returns streaming text
 - use useChat for all streaming handling (read the doc first, always, before writing any streaming code: https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat)
 - **CRITICAL**: `sendMessage()` from useChat ONLY accepts UIMessage-compatible objects: `sendMessage({ text: "message" })`
 - **NEVER** use `sendMessage("string")` - this does NOT work and will cause runtime errors
 - Messages from useChat have a `parts` array structure, NOT a simple `content` field
-- Tool calls and sources are supported in the response format
+- Tool calls are supported in the response format
 - Requires environment variables in `.env.local`
 - Reference: https://ai-sdk.dev/docs/reference/ai-sdk-core/stream-text#streamtext
 
@@ -79,24 +73,24 @@ This documentation is essential for understanding:
 
 **IMPORTANT**: Always read the AI SDK data streaming documentation when working with custom data parts: https://ai-sdk.dev/docs/ai-sdk-ui/streaming-data
 
-##### Streaming Sources and Custom Data
+##### Streaming Tool Data
 
-When tools return structured data (like sources from RAG retrieval), the data is automatically streamed as part of the tool call response:
+When tools return structured data, the data is automatically streamed as part of the tool call response:
 
 ```typescript
-// Tool that returns sources
-export const retrieveKnowledgeBase = tool({
-  description: 'Search the knowledge base',
+// Tool that returns structured data
+export const myTool = tool({
+  description: 'Search for information',
   inputSchema: z.object({
     query: z.string(),
   }),
   execute: async ({ query }) => {
-    // ... retrieve documents ...
+    // ... perform action ...
     return {
-      context: 'Document content here',
-      sources: [
-        { url: 'https://example.com', title: 'Source 1', snippet: 'Preview text' }
-      ]
+      result: 'Data here',
+      metadata: {
+        timestamp: Date.now()
+      }
     };
   },
 });
@@ -106,18 +100,18 @@ The returned data is automatically included in the tool call result and streamed
 
 **Frontend Access Pattern**:
 ```typescript
-// Extract sources from tool results in the UI
-const ragToolCalls = message.parts?.filter(
-  part => part.type === "tool" && part.toolName === "retrieveKnowledgeBase" && part.result?.sources
+// Extract tool results in the UI
+const toolCalls = message.parts?.filter(
+  part => part.type === "tool" && part.toolName === "myTool" && part.result
 );
 
-const sources = ragToolCalls?.flatMap(tool => tool.result?.sources || []) || [];
+const results = toolCalls?.map(tool => tool.result) || [];
 ```
 
 **Chat Component with Custom API Endpoint**:
 ```typescript
 // Use ChatAssistant with custom API endpoint
-<ChatAssistant api="/api/rag-agent" />
+<ChatAssistant api="/api/agent-with-mcp-tools" />
 
 // ChatAssistant component supports optional api prop
 interface ChatAssistantProps {
@@ -132,13 +126,11 @@ const { messages, status, sendMessage } = useChat({
 ##### Types of Streamable Data
 
 1. **Tool Results**: Automatically streamed when tools return data
-2. **Sources**: Can be included in tool results for RAG implementations
-3. **Custom Data Parts**: Can be streamed using `streamData` for more complex scenarios
+2. **Custom Data Parts**: Can be streamed using `streamData` for more complex scenarios
 
 ##### Best Practices
 
 - Keep tool return types simple to avoid TypeScript deep instantiation errors
-- Include sources directly in tool results for automatic streaming
 - Use the `toUIMessageStreamResponse()` method for proper client compatibility
 - Tool results are automatically included in the message parts array
 
@@ -152,7 +144,7 @@ const { messages, status, sendMessage } = useChat({
 const result = streamText({
   model: openai("gpt-5"),
   messages: modelMessages,
-  tools: { retrieveKnowledgeBase },
+  tools: { myTool },
   stopWhen: stepCountIs(10), // CURRENT API - replaces deprecated maxSteps
 });
 ```
@@ -165,7 +157,7 @@ Control how and when tools are called using the `toolChoice` parameter:
 const result = streamText({
   model: openai("gpt-5"),
   messages: modelMessages,
-  tools: { retrieveKnowledgeBase },
+  tools: { myTool },
   toolChoice: 'auto', // Options: 'auto', 'required', 'none', or specific tool name
   stopWhen: stepCountIs(5),
 });
@@ -176,59 +168,6 @@ const result = streamText({
 - **`none`**: Disable all tool calls
 - **Specific tool**: Force a particular tool to be called
 
-##### Converting Tool Results to Source Data Parts
-
-**Current Limitation (v5.0.44)**: The `response.steps` API is not yet available in the current version. Sources are currently displayed from tool results embedded in message parts.
-
-```typescript
-// Current working approach (v5.0.44)
-const result = streamText({
-  model: openai("gpt-5"),
-  messages: modelMessages,
-  tools: { retrieveKnowledgeBase },
-  stopWhen: stepCountIs(10),
-});
-
-return result.toUIMessageStreamResponse();
-
-// Frontend extracts sources from tool results in message parts
-// See ChatAssistant component for implementation
-```
-
-**Future Implementation** (when `response.steps` becomes available):
-```typescript
-const stream = createUIMessageStream({
-  execute: async ({ writer }) => {
-    const result = streamText({
-      model: openai("gpt-5"),
-      messages: modelMessages,
-      tools: { retrieveKnowledgeBase },
-      stopWhen: stepCountIs(10),
-    });
-
-    writer.merge(result.toUIMessageStream());
-
-    // This will work when response.steps is available
-    const response = await result.response;
-    for (const step of response.steps || []) {
-      if (step.toolResults) {
-        for (const toolResult of step.toolResults) {
-          if (toolResult.toolName === 'retrieveKnowledgeBase') {
-            for (const source of toolResult.output?.sources || []) {
-              writer.write({
-                type: 'source-url', // Correct type for current version
-                url: source.url,
-                title: source.title
-              });
-            }
-          }
-        }
-      }
-    }
-  }
-});
-```
-
 #### Tool Implementation Guidelines
 
 - **Location**: All agent tools are in `/components/agent/tools/`
@@ -236,9 +175,7 @@ const stream = createUIMessageStream({
   - `description`: Clear explanation of the tool's purpose (influences tool selection)
   - `inputSchema`: Zod schema defining input parameters
   - `execute`: Async function performing the tool's action
-- **Current Tools**:
-  - `retrieveKnowledgeBase`: Searches the Vectorize knowledge base for relevant information
-  - `web_search`: OpenAI's web search tool for current information
+- **Current Tools**: MCP tools are dynamically loaded from MCP server connections
 
 #### Creating New Tools and Agents
 
@@ -253,8 +190,8 @@ When creating new tools:
 6. Add the tool to the appropriate API route's tools configuration
 
 When creating new agents:
-1. Follow the pattern established in `/app/api/rag-agent/route.ts`
-2. Create new prompts in `/components/agent/` following the structure of `prompt.ts` and `rag-prompt.ts`
+1. Follow the pattern established in `/app/api/agent-with-mcp-tools/route.ts`
+2. Create new prompts in `/components/agent/` following the structure of existing prompt files
 3. Use the same streaming patterns and error handling as existing agents
 4. Always include proper tool configurations and import from `/components/agent/tools`
 
@@ -361,11 +298,6 @@ Display tool execution states using AI Elements:
 - shadcn/ui: `pnpm dlx shadcn@latest add [component-name]`
 - AI Elements: `pnpm dlx ai-elements@latest` (adds all components)
 
-### RAG Source Streaming
-
-**CRITICAL REQUIREMENT**: You MUST read the AI SDK streaming data documentation before implementing RAG source citations: https://ai-sdk.dev/docs/ai-sdk-ui/streaming-data
-
-This documentation is essential for understanding how to properly stream source data parts from RAG tools to the frontend.
 
 ## Environment Setup
 
@@ -373,9 +305,6 @@ Create `.env.local` with:
 
 ```
 OPENAI_API_KEY=your_openai_api_key_here
-VECTORIZE_ACCESS_TOKEN=your_vectorize_token
-VECTORIZE_ORG_ID=your_org_id
-VECTORIZE_PIPELINE_ID=your_pipeline_id
 ```
 
 ## Critical Rules for useChat Implementation

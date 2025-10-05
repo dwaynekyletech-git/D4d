@@ -1,0 +1,198 @@
+openapi: 3.1.0
+info:
+  title: Documentation for Dummies Agent API
+  version: 1.0.0
+  description: AI agent that simplifies technical documentation for beginners
+
+paths:
+  /api/doc-for-dummies-agent:
+    post:
+      summary: Send message to Documentation for Dummies agent
+      description: |
+        Accepts user messages and returns streaming AI responses with simplified
+        technical explanations. May include tool calls to retrieve documentation
+        from Context7 MCP server.
+
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - messages
+              properties:
+                messages:
+                  type: array
+                  description: Conversation history including new user message
+                  items:
+                    $ref: '#/components/schemas/UIMessage'
+
+            examples:
+              simple_question:
+                summary: Simple technical question
+                value:
+                  messages:
+                    - role: user
+                      content: "What does API mean?"
+
+              follow_up:
+                summary: Follow-up question with context
+                value:
+                  messages:
+                    - role: user
+                      content: "What does API mean?"
+                    - role: assistant
+                      content: "An API (Application Programming Interface) is like a menu at a restaurant..."
+                    - role: user
+                      content: "Can you give me a simpler example?"
+
+      responses:
+        '200':
+          description: Streaming AI response with text and tool calls
+          content:
+            text/plain:
+              schema:
+                type: string
+                format: binary
+                description: |
+                  Server-Sent Events stream containing AI response parts.
+                  May include text chunks, tool calls, and tool results.
+
+              examples:
+                successful_response:
+                  summary: Response with documentation retrieval
+                  value: |
+                    # Stream contains multiple parts:
+                    # 1. Tool call to retrieve-documentation
+                    # 2. Documentation result
+                    # 3. Text explanation in beginner-friendly language
+
+                unavailable_docs:
+                  summary: Documentation not available
+                  value: |
+                    # Stream shows tool call failed
+                    # Agent explains documentation is unavailable
+                    # Provides general explanation if possible
+
+        '400':
+          description: Invalid request (missing messages or wrong format)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                missing_messages:
+                  summary: Missing messages array
+                  value:
+                    error: "messages array is required"
+
+        '500':
+          description: Server error (AI service unavailable, MCP failure)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                ai_service_error:
+                  summary: OpenAI API failure
+                  value:
+                    error: "AI service unavailable"
+
+components:
+  schemas:
+    UIMessage:
+      type: object
+      description: Message in AI SDK format (simplified for contract)
+      required:
+        - role
+        - content
+      properties:
+        id:
+          type: string
+          description: Unique message identifier (optional in request)
+        role:
+          type: string
+          enum: [user, assistant, system]
+          description: Message sender role
+        content:
+          type: string
+          description: Message text content
+        createdAt:
+          type: string
+          format: date-time
+          description: Message creation timestamp
+
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          description: Additional error context (optional)
+
+  examples:
+    APIQuestion:
+      summary: User asks about API concept
+      value:
+        messages:
+          - role: user
+            content: "What does API mean?"
+
+    DatabaseQuestion:
+      summary: User asks about database concepts
+      value:
+        messages:
+          - role: user
+            content: "What is a relational database?"
+
+    FollowUpSimplification:
+      summary: User requests simpler explanation
+      value:
+        messages:
+          - role: user
+            content: "What is a REST API?"
+          - role: assistant
+            content: "A REST API is a way for software applications to communicate over the internet using standard HTTP methods..."
+          - role: user
+            content: "I still don't understand. Can you use a simpler example?"
+
+# Tool Call Format (informational, not enforced by OpenAPI)
+# Tool calls appear in the streaming response as AI SDK MessageParts:
+#
+# ToolCallPart:
+#   type: "tool"
+#   toolName: "retrieve-documentation"
+#   toolCallId: "call_abc123"
+#   input:
+#     query: "API definition programming"
+#   result:
+#     documentation: "An API (Application Programming Interface)..."
+#     available: true
+#
+# When documentation unavailable:
+#   result:
+#     documentation: null
+#     available: false
+#     message: "Documentation not available for this topic"
+
+# Acceptance Criteria (from spec.md):
+# - FR-001: Accept plain language questions (no technical terminology required)
+# - FR-005: Support multi-turn conversations (messages array maintains history)
+# - FR-006: Maintain context across turns (previous messages included in request)
+# - FR-010: Use Context7 MCP for documentation retrieval (via tool calls)
+# - FR-011: Session-only history (client-side state management, no server persistence)
+
+# Performance Requirements:
+# - Streaming response start: < 500ms
+# - Documentation retrieval: < 2s
+# - Total response time: < 5s for simple questions
+
+# Security:
+# - No authentication required (public MVP)
+# - Rate limiting: Deferred (not in MVP scope)
+# - Input validation: Messages array required, role enum validated
