@@ -7,6 +7,9 @@ export default function Home() {
         <Link href="/agent-with-mcp-tools" className="text-center">
           Agent with MCP Tools
         </Link>
+        <Link href="/doc-for-dummies" className="text-center">
+          Documentation for Dummies Agent
+        </Link>
       </div>
     </div>
   );

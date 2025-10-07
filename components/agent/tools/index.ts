@@ -1,2 +1,1 @@
-export { retrieveKnowledgeBase } from './retrieve-knowledge-base';
-export { retrieveKnowledgeBaseSimple } from './retrieve-knowledge-base-simple';
+export { retrieveDocumentation } from "./retrieve-documentation";

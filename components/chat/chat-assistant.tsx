@@ -244,6 +244,7 @@ export default function ChatAssistant({ api }: ChatAssistantProps) {
               // Tool display name mapping
               const toolDisplayNames: Record<string, string> = {
                 'tool-retrieveKnowledgeBase': 'Knowledge Base Search',
+                'tool-retrieveDocumentation': 'Documentation Retrieval',
                 // Add more tool mappings as needed
               };
 
