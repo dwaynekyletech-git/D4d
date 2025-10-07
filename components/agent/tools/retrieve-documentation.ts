@@ -11,32 +11,26 @@ import type { MCPToolResult } from "@/types/mcp";
  */
 export const retrieveDocumentation = tool({
   description:
-    "Retrieve technical documentation from Context7 MCP server to answer user questions about technical libraries, frameworks, or tools. Extracts library name and topic from the query.",
+    "Retrieve technical documentation from Context7 MCP server to answer user questions about technical libraries, frameworks, or tools. Pass the full library/tool name as it appears in the user's question.",
   inputSchema: z.object({
-    libraryName: z
+    query: z
       .string()
       .describe(
-        "Name of the library, framework, or tool (e.g., 'Supabase', 'Next.js', 'React', 'TypeScript')"
-      ),
-    topic: z
-      .string()
-      .optional()
-      .describe(
-        "Specific topic within the library to focus on (e.g., 'CLI', 'authentication', 'routing', 'hooks')"
+        "The full name of the library, framework, tool, or technology to search for (e.g., 'Supabase CLI', 'Next.js', 'React hooks', 'TypeScript'). Include all relevant terms from the user's question."
       ),
   }),
-  execute: async ({ libraryName, topic }): Promise<MCPToolResult> => {
-    console.log(`🔍 Retrieving documentation for: "${libraryName}"${topic ? ` (topic: ${topic})` : ""}`);
+  execute: async ({ query }): Promise<MCPToolResult> => {
+    console.log(`🔍 Retrieving documentation for: "${query}"`);
 
     try {
       const client = await getMcpClient();
 
-      // Step 1: Resolve library ID
-      console.log(`📖 Resolving library ID for: "${libraryName}"`);
+      // Step 1: Resolve library ID using the full query
+      console.log(`📖 Resolving library ID for: "${query}"`);
       const resolvePromise = client.callTool({
         name: "resolve-library-id",
         arguments: {
-          libraryName,
+          libraryName: query,
         },
       });
 
@@ -52,16 +46,33 @@ export const retrieveDocumentation = tool({
         | undefined;
 
       if (!resolveContent || resolveContent.length === 0 || !resolveContent[0]?.text) {
-        console.log(`⚠️ Could not resolve library ID for: "${libraryName}"`);
+        console.log(`⚠️ Could not resolve library ID for: "${query}"`);
         return {
           documentation: null,
           available: false,
-          message: `Library "${libraryName}" not found in Context7 database.`,
+          message: `Library "${query}" not found in Context7 database.`,
         };
       }
 
-      const libraryId = resolveContent[0].text.trim();
-      console.log(`✅ Resolved library ID: ${libraryId}`);
+      const responseText = resolveContent[0].text.trim();
+      console.log(`📝 Raw resolve response (first 300 chars): ${responseText.substring(0, 300)}`);
+
+      // Extract the actual library ID from the formatted response
+      // Context7 returns: "- Context7-compatible library ID: /org/project"
+      const libraryIdMatch = responseText.match(/Context7-compatible library ID:\s*(\/[\w\-\/]+)/i);
+
+      if (!libraryIdMatch || !libraryIdMatch[1]) {
+        console.log(`⚠️ Could not extract library ID from response for: "${query}"`);
+        console.log(`Response text: ${responseText.substring(0, 500)}`);
+        return {
+          documentation: null,
+          available: false,
+          message: `Unable to resolve library ID for "${query}". The library may not be in the Context7 database.`,
+        };
+      }
+
+      const libraryId = libraryIdMatch[1];
+      console.log(`✅ Extracted library ID: ${libraryId}`);
 
       // Step 2: Get library documentation
       console.log(`📚 Fetching documentation for library ID: ${libraryId}`);
@@ -69,7 +80,6 @@ export const retrieveDocumentation = tool({
         name: "get-library-docs",
         arguments: {
           context7CompatibleLibraryID: libraryId,
-          ...(topic && { topic }),
           tokens: 5000,
         },
       });
@@ -87,7 +97,7 @@ export const retrieveDocumentation = tool({
 
       // Check if we got content back
       if (!content || content.length === 0 || !content[0]?.text) {
-        console.log(`⚠️ No documentation found for: "${libraryName}"${topic ? ` (topic: ${topic})` : ""}`);
+        console.log(`⚠️ No documentation found for: "${query}"`);
         return {
           documentation: null,
           available: false,
@@ -99,7 +109,7 @@ export const retrieveDocumentation = tool({
       const documentation = content[0].text;
 
       if (!documentation) {
-        console.log(`⚠️ No text content in documentation for: "${libraryName}"${topic ? ` (topic: ${topic})` : ""}`);
+        console.log(`⚠️ No text content in documentation for: "${query}"`);
         return {
           documentation: null,
           available: false,
@@ -121,12 +131,12 @@ export const retrieveDocumentation = tool({
       );
 
       if (isErrorMessage) {
-        console.log(`⚠️ Context7 returned error message for: "${libraryName}"${topic ? ` (topic: ${topic})` : ""}`);
+        console.log(`⚠️ Context7 returned error message for: "${query}"`);
         console.log(`Error text: ${documentation.substring(0, 200)}`);
         return {
           documentation: null,
           available: false,
-          message: `Documentation for "${libraryName}" is not available in the Context7 database.`,
+          message: `Documentation for "${query}" is not available in the Context7 database.`,
         };
       }
 

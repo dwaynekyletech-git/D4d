@@ -1,5 +1,5 @@
 import { openai } from "@ai-sdk/openai";
-import { streamText, convertToModelMessages } from "ai";
+import { streamText, convertToModelMessages, stepCountIs } from "ai";
 import { docForDummiesPrompt } from "@/components/agent/doc-for-dummies-prompt";
 import { retrieveDocumentation } from "@/components/agent/tools";
 
@@ -36,6 +36,7 @@ export async function POST(request: Request) {
         retrieveDocumentation,
       },
       toolChoice: "auto", // Let model decide when to use tools
+      stopWhen: stepCountIs(5), // Allow up to 5 steps (tool calls + responses)
     });
 
     // Return streaming response with tool support
